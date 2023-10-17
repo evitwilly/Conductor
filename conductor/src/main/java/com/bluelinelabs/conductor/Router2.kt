@@ -37,9 +37,9 @@ abstract class Router2 {
 
   private var onBackPressedDispatcherEnabled = false
   private var containerFullyAttached = false
-  private var isActivityStopped = false
+  internal var isActivityStopped = false
 
-  private var container: ViewGroup? = null
+  internal var container: ViewGroup? = null
 
   init {
     backstack.onBackstackUpdatedListener = Backstack.OnBackstackUpdatedListener {

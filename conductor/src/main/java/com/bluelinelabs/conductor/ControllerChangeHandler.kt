@@ -118,7 +118,7 @@ abstract class ControllerChangeHandler {
 
   open fun handleOnBackCancelled(container: ViewGroup, to: View?, from: View) {}
 
-  protected open fun onEnd() {}
+  open fun onEnd() {}
 
   fun toBundle(): Bundle {
     val bundle = Bundle()
