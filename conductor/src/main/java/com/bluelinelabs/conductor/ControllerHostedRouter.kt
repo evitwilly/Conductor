@@ -1,299 +1,245 @@
-package com.bluelinelabs.conductor;
+package com.bluelinelabs.conductor
 
-import android.app.Activity;
-import android.content.Intent;
-import android.content.IntentSender;
-import android.content.IntentSender.SendIntentException;
-import android.os.Bundle;
-import android.text.TextUtils;
-import android.view.ViewGroup;
+import android.app.Activity
+import android.content.Intent
+import android.content.IntentSender
+import android.content.IntentSender.SendIntentException
+import android.os.Bundle
+import android.text.TextUtils
+import android.view.ViewGroup
+import androidx.annotation.IdRes
+import com.bluelinelabs.conductor.ControllerChangeHandler.ControllerChangeListener
+import com.bluelinelabs.conductor.internal.TransactionIndexer
+import java.util.Locale
 
-import androidx.annotation.IdRes;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+private const val KEY_HOST_ID = "ControllerHostedRouter.hostId"
+private const val KEY_TAG = "ControllerHostedRouter.tag"
+private const val KEY_BOUND_TO_CONTAINER = "ControllerHostedRouter.boundToContainer"
 
-import com.bluelinelabs.conductor.ControllerChangeHandler.ControllerChangeListener;
-import com.bluelinelabs.conductor.internal.TransactionIndexer;
+internal class ControllerHostedRouter(
+    @IdRes private var hostId: Int = 0,
+    private var tag: String? = null,
+    private var boundToContainer: Boolean = false
+) : Router() {
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
+  private var hostController: Controller? = null
 
-class ControllerHostedRouter extends Router {
+    private var isDetachFrozen = false
 
-    private final String KEY_HOST_ID = "ControllerHostedRouter.hostId";
-    private final String KEY_TAG = "ControllerHostedRouter.tag";
-    private final String KEY_BOUND_TO_CONTAINER = "ControllerHostedRouter.boundToContainer";
+    init {
+        check(!(!boundToContainer && tag == null)) { "ControllerHostedRouter can't be created without a tag if not bounded to its container" }
 
-    private Controller hostController;
-
-    @IdRes private int hostId;
-    private String tag;
-    private boolean isDetachFrozen;
-    private boolean boundToContainer;
-
-    ControllerHostedRouter() {
-        popRootControllerMode = PopRootControllerMode.POP_ROOT_CONTROLLER_BUT_NOT_VIEW;
+        popRootControllerMode = PopRootControllerMode.POP_ROOT_CONTROLLER_BUT_NOT_VIEW
     }
 
-    ControllerHostedRouter(int hostId, @Nullable String tag, boolean boundToContainer) {
-        this();
-        if (!boundToContainer && tag == null) {
-            throw new IllegalStateException("ControllerHostedRouter can't be created without a tag if not bounded to its container");
-        }
-        this.hostId = hostId;
-        this.tag = tag;
-        this.boundToContainer = boundToContainer;
-    }
-
-    final void setHostController(@NonNull Controller controller) {
+    fun setHostController(controller: Controller) {
         if (hostController == null) {
-            hostController = controller;
-            setOnBackPressedDispatcherEnabled(controller.onBackPressedDispatcherEnabled);
+            hostController = controller
+            setOnBackPressedDispatcherEnabled(controller.onBackPressedDispatcherEnabled)
         }
     }
 
-    final void setHostContainer(@NonNull Controller controller, @NonNull ViewGroup container) {
-        if (hostController != controller || this.container != container) {
-            removeHost();
-
-            if (container instanceof ControllerChangeListener) {
-                addChangeListener((ControllerChangeListener) container);
+    fun setHostContainer(controller: Controller, container: ViewGroup) {
+        if (hostController !== controller || this.container !== container) {
+            removeHost()
+            if (container is ControllerChangeListener) {
+                addChangeListener(container)
             }
-
-            hostController = controller;
-            this.container = container;
-            setOnBackPressedDispatcherEnabled(controller.onBackPressedDispatcherEnabled);
-
-            for (RouterTransaction transaction : backstack) {
-                transaction.controller().setParentController(controller);
+            hostController = controller
+            this.container = container
+            setOnBackPressedDispatcherEnabled(controller.onBackPressedDispatcherEnabled)
+            for (transaction in backstack) {
+                transaction.controller.parentController = controller
             }
-
-            watchContainerAttach();
+            watchContainerAttach()
         }
     }
 
-    final void removeHost() {
-        if (container != null && container instanceof ControllerChangeListener) {
-            removeChangeListener((ControllerChangeListener) container);
+    fun removeHost() {
+        val currentContainer = container
+        if (currentContainer != null && currentContainer is ControllerChangeListener) {
+            removeChangeListener(currentContainer)
         }
-
-        final List<Controller> controllersToDestroy = new ArrayList<>(destroyingControllers);
-        for (Controller controller : controllersToDestroy) {
+        for (controller in destroyingControllers) {
             if (controller.getView() != null) {
-                controller.detach(controller.getView(), true, false);
+                controller.detach(controller.getView(), true, false)
             }
         }
-        for (RouterTransaction transaction : backstack) {
-            if (transaction.controller().getView() != null) {
-                transaction.controller().detach(transaction.controller().getView(), true, false);
+        for (transaction in backstack) {
+            if (transaction.controller.getView() != null) {
+                transaction.controller.detach(transaction.controller.getView(), true, false)
             }
         }
-
-        prepareForContainerRemoval();
-        container = null;
+        prepareForContainerRemoval()
+        container = null
     }
 
-    final void setDetachFrozen(boolean frozen) {
-        isDetachFrozen = frozen;
-        for (RouterTransaction transaction : backstack) {
-            transaction.controller().setDetachFrozen(frozen);
+    fun setDetachFrozen(frozen: Boolean) {
+        isDetachFrozen = frozen
+        for (transaction in backstack) {
+            transaction.controller.setDetachFrozen(frozen)
         }
     }
 
-    @Override
-    void destroy(boolean popViews) {
-        setDetachFrozen(false);
-        super.destroy(popViews);
+    fun hostId() = hostId
+
+    public override fun destroy(popViews: Boolean) {
+        setDetachFrozen(false)
+        super.destroy(popViews)
     }
 
-    @Override
-    protected void pushToBackstack(@NonNull RouterTransaction entry) {
+    override fun pushToBackstack(entry: RouterTransaction) {
         if (isDetachFrozen) {
-            entry.controller().setDetachFrozen(true);
+            entry.controller.setDetachFrozen(true)
         }
-        super.pushToBackstack(entry);
+        super.pushToBackstack(entry)
     }
 
-    @Override
-    public void setBackstack(@NonNull List<RouterTransaction> newBackstack, @Nullable ControllerChangeHandler changeHandler) {
+    override fun setBackstack(newBackstack: List<RouterTransaction>, changeHandler: ControllerChangeHandler?) {
         if (isDetachFrozen) {
-            for (RouterTransaction transaction : newBackstack) {
-                transaction.controller().setDetachFrozen(true);
+            for (transaction in newBackstack) {
+                transaction.controller.setDetachFrozen(true)
             }
         }
-        super.setBackstack(newBackstack, changeHandler);
+        super.setBackstack(newBackstack, changeHandler)
     }
 
-    @Override
-    void performControllerChange(@Nullable RouterTransaction to, @Nullable RouterTransaction from, boolean isPush) {
-        super.performControllerChange(to, from, isPush);
+    override fun performControllerChange(to: RouterTransaction?, from: RouterTransaction?, isPush: Boolean) {
+        super.performControllerChange(to, from, isPush)
 
+        val hostController = hostController ?: return
         // If we're pushing a transaction that will detach controllers to an unattached child
         // router, we need mark all other controllers as NOT needing to be reattached.
-        if (to != null && !hostController.isAttached()) {
-            if (to.pushChangeHandler() == null || to.pushChangeHandler().getRemovesFromViewOnPush()) {
-                for (RouterTransaction transaction : backstack) {
-                    transaction.controller().setNeedsAttach(false);
+        if (to != null && !hostController.isAttached) {
+            val pushChangeHandler = to.pushChangeHandler()
+            if (pushChangeHandler == null || pushChangeHandler.removesFromViewOnPush) {
+                for (transaction in backstack) {
+                    transaction.controller.needsAttach = false
                 }
             }
         }
     }
 
-    @Override @Nullable
-    public Activity getActivity() {
-        return hostController != null ? hostController.getActivity() : null;
+    override fun getActivity(): Activity? {
+        return hostController?.activity
     }
 
-    @Override
-    public void onActivityDestroyed(@NonNull Activity activity, boolean isConfigurationChange) {
-        super.onActivityDestroyed(activity, isConfigurationChange);
-
-        removeHost();
+    override fun onActivityDestroyed(activity: Activity, isConfigurationChange: Boolean) {
+        super.onActivityDestroyed(activity, isConfigurationChange)
+        removeHost()
     }
 
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        if (hostController != null && hostController.getRouter() != null) {
-            hostController.getRouter().onActivityResult(requestCode, resultCode, data);
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (hostController != null && hostController!!.getRouter() != null) {
+            hostController!!.getRouter().onActivityResult(requestCode, resultCode, data)
         }
     }
 
-    @Override
-    public void invalidateOptionsMenu() {
-        if (hostController != null && hostController.getRouter() != null) {
-            hostController.getRouter().invalidateOptionsMenu();
+    override fun invalidateOptionsMenu() {
+        if (hostController != null && hostController!!.getRouter() != null) {
+            hostController!!.getRouter().invalidateOptionsMenu()
         }
     }
 
-    @Override
-    void startActivity(@NonNull Intent intent) {
-        if (hostController != null && hostController.getRouter() != null) {
-            hostController.getRouter().startActivity(intent);
+    override fun startActivity(intent: Intent) {
+        val router = hostController?.getRouter() ?: return
+        router.startActivity(intent)
+    }
+
+    override fun startActivityForResult(instanceId: String, intent: Intent, requestCode: Int) {
+        val router = hostController?.getRouter() ?: return
+        router.startActivityForResult(instanceId, intent, requestCode)
+    }
+
+    override fun startActivityForResult(instanceId: String, intent: Intent, requestCode: Int, options: Bundle?) {
+        val router = hostController?.getRouter() ?: return
+        router.startActivityForResult(instanceId, intent, requestCode, options)
+    }
+
+    @Throws(SendIntentException::class)
+    override fun startIntentSenderForResult(instanceId: String, intent: IntentSender, requestCode: Int,
+        fillInIntent: Intent?, flagsMask: Int, flagsValues: Int, extraFlags: Int, options: Bundle?) {
+        val router = hostController?.getRouter() ?: return
+        router.startIntentSenderForResult(instanceId, intent, requestCode, fillInIntent, flagsMask,
+            flagsValues, extraFlags, options)
+    }
+
+    override fun registerForActivityResult(instanceId: String, requestCode: Int) {
+        val router =  hostController?.getRouter() ?: return
+        router.registerForActivityResult(instanceId, requestCode)
+    }
+
+    override fun unregisterForActivityResults(instanceId: String) {
+        if (hostController != null && hostController!!.getRouter() != null) {
+            hostController!!.getRouter().unregisterForActivityResults(instanceId)
         }
     }
 
-    @Override
-    void startActivityForResult(@NonNull String instanceId, @NonNull Intent intent, int requestCode) {
-        if (hostController != null && hostController.getRouter() != null) {
-            hostController.getRouter().startActivityForResult(instanceId, intent, requestCode);
-        }
+    override fun requestPermissions(instanceId: String, permissions: Array<String>, requestCode: Int) {
+        val router = hostController?.getRouter() ?: return
+        router.requestPermissions(instanceId, permissions, requestCode)
     }
 
-    @Override
-    void startActivityForResult(@NonNull String instanceId, @NonNull Intent intent, int requestCode, @Nullable Bundle options) {
-        if (hostController != null && hostController.getRouter() != null) {
-            hostController.getRouter().startActivityForResult(instanceId, intent, requestCode, options);
-        }
+    public override fun hasHost(): Boolean {
+        return hostController != null && container != null
     }
 
-    @Override
-    void startIntentSenderForResult(@NonNull String instanceId, @NonNull IntentSender intent, int requestCode, @Nullable Intent fillInIntent, int flagsMask, int flagsValues, int extraFlags, @Nullable Bundle options) throws SendIntentException {
-        if (hostController != null && hostController.getRouter() != null) {
-            hostController.getRouter().startIntentSenderForResult(instanceId, intent, requestCode, fillInIntent, flagsMask, flagsValues, extraFlags, options);
-        }
+    override fun saveInstanceState(outState: Bundle) {
+        super.saveInstanceState(outState)
+        outState.putInt(KEY_HOST_ID, hostId)
+        outState.putBoolean(KEY_BOUND_TO_CONTAINER, boundToContainer)
+        outState.putString(KEY_TAG, tag)
     }
 
-    @Override
-    void registerForActivityResult(@NonNull String instanceId, int requestCode) {
-        if (hostController != null && hostController.getRouter() != null) {
-            hostController.getRouter().registerForActivityResult(instanceId, requestCode);
-        }
+    override fun restoreInstanceState(savedInstanceState: Bundle) {
+        super.restoreInstanceState(savedInstanceState)
+        hostId = savedInstanceState.getInt(KEY_HOST_ID)
+        boundToContainer = savedInstanceState.getBoolean(KEY_BOUND_TO_CONTAINER)
+        tag = savedInstanceState.getString(KEY_TAG)
     }
 
-    @Override
-    void unregisterForActivityResults(@NonNull String instanceId) {
-        if (hostController != null && hostController.getRouter() != null) {
-            hostController.getRouter().unregisterForActivityResults(instanceId);
-        }
+    public override fun setRouterOnController(controller: Controller) {
+        controller.parentController = hostController
+        super.setRouterOnController(controller)
     }
 
-    @Override
-    void requestPermissions(@NonNull String instanceId, @NonNull String[] permissions, int requestCode) {
-        if (hostController != null && hostController.getRouter() != null) {
-            hostController.getRouter().requestPermissions(instanceId, permissions, requestCode);
-        }
-    }
-
-    @Override
-    boolean hasHost() {
-        return hostController != null && container != null;
-    }
-
-    @Override
-    public void saveInstanceState(@NonNull Bundle outState) {
-        super.saveInstanceState(outState);
-
-        outState.putInt(KEY_HOST_ID, hostId);
-        outState.putBoolean(KEY_BOUND_TO_CONTAINER, boundToContainer);
-        outState.putString(KEY_TAG, tag);
-    }
-
-    @Override
-    public void restoreInstanceState(@NonNull Bundle savedInstanceState) {
-        super.restoreInstanceState(savedInstanceState);
-
-        hostId = savedInstanceState.getInt(KEY_HOST_ID);
-        boundToContainer = savedInstanceState.getBoolean(KEY_BOUND_TO_CONTAINER);
-        tag = savedInstanceState.getString(KEY_TAG);
-    }
-
-    @Override
-    void setRouterOnController(@NonNull Controller controller) {
-        controller.setParentController(hostController);
-        super.setRouterOnController(controller);
-    }
-
-    int getHostId() {
-        return hostId;
-    }
-
-    boolean matches(int hostId, @Nullable String tag) {
+    fun matches(hostId: Int, tag: String?): Boolean {
         if (!boundToContainer && container == null) {
-            if (this.tag == null) {
-                throw new IllegalStateException("Host ID can't be variable with a null tag");
-            }
-            if (this.tag.equals(tag)) {
-                this.hostId = hostId;
-                return true;
+            checkNotNull(this.tag) { "Host ID can't be variable with a null tag" }
+            if (this.tag == tag) {
+                this.hostId = hostId
+                return true
             }
         }
-
-        return this.hostId == hostId && TextUtils.equals(tag, this.tag);
+        return this.hostId == hostId && TextUtils.equals(tag, this.tag)
     }
 
-    @Override @NonNull
-    List<Router> getSiblingRouters() {
-        List<Router> list = new ArrayList<>();
-        list.addAll(hostController.getChildRouters());
-        list.addAll(hostController.getRouter().getSiblingRouters());
-        return list;
+    override fun getSiblingRouters(): List<Router> {
+        return hostController?.childRouters.orEmpty() + hostController?.router?.siblingRouters.orEmpty()
     }
 
-    @Override @NonNull
-    Router getRootRouter() {
-        if (hostController != null && hostController.getRouter() != null) {
-            return hostController.getRouter().getRootRouter();
-        } else {
-            return this;
-        }
+    override fun getRootRouter(): Router {
+        return hostController?.getRouter()?.rootRouter ?: this
     }
 
-    @Override @NonNull
-    TransactionIndexer getTransactionIndexer() {
-        Router rootRouter = getRootRouter();
+    override fun getTransactionIndexer(): TransactionIndexer {
         if (rootRouter == this) {
-            String debugInfo;
-            if (hostController != null) {
-                debugInfo = String.format(Locale.ENGLISH, "%s (attached? %b, destroyed? %b, parent: %s)",
-                        hostController.getClass().getSimpleName(), hostController.isAttached(), hostController.isBeingDestroyed, hostController.getParentController());
+            val hostController = hostController
+            val debugInfo = if (hostController != null) {
+                String.format(
+                    Locale.ENGLISH,
+                    "%s (attached? %b, destroyed? %b, parent: %s)",
+                    hostController.javaClass.simpleName,
+                    hostController.isAttached,
+                    hostController.isBeingDestroyed,
+                    hostController.parentController
+                )
             } else {
-                debugInfo = "null host controller";
+                "null host controller"
             }
-            throw new IllegalStateException("Unable to retrieve TransactionIndexer from " + debugInfo);
-        } else {
-            return getRootRouter().getTransactionIndexer();
+            throw IllegalStateException("Unable to retrieve TransactionIndexer from $debugInfo")
         }
+        return rootRouter.transactionIndexer
     }
 
 }

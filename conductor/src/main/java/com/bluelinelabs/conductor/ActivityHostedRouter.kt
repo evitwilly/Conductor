@@ -1,146 +1,123 @@
-package com.bluelinelabs.conductor;
+package com.bluelinelabs.conductor
 
-import android.app.Activity;
-import android.content.Intent;
-import android.content.IntentSender;
-import android.content.IntentSender.SendIntentException;
-import android.os.Bundle;
-import android.view.ViewGroup;
+import android.app.Activity
+import android.content.Intent
+import android.content.IntentSender
+import android.content.IntentSender.SendIntentException
+import android.os.Bundle
+import android.view.ViewGroup
+import com.bluelinelabs.conductor.ControllerChangeHandler.ControllerChangeListener
+import com.bluelinelabs.conductor.internal.LifecycleHandler
+import com.bluelinelabs.conductor.internal.TransactionIndexer
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+class ActivityHostedRouter : Router() {
+    private var lifecycleHandler: LifecycleHandler? = null
+    private val transactionIndexer = TransactionIndexer()
 
-import com.bluelinelabs.conductor.ControllerChangeHandler.ControllerChangeListener;
-import com.bluelinelabs.conductor.internal.LifecycleHandler;
-import com.bluelinelabs.conductor.internal.TransactionIndexer;
-
-import java.util.List;
-
-public class ActivityHostedRouter extends Router {
-
-    private LifecycleHandler lifecycleHandler;
-    private final TransactionIndexer transactionIndexer = new TransactionIndexer();
-
-    public ActivityHostedRouter() {
-        popRootControllerMode = PopRootControllerMode.NEVER;
+    init {
+        popRootControllerMode = PopRootControllerMode.NEVER
     }
 
-    public final void setHost(@NonNull LifecycleHandler lifecycleHandler, @NonNull ViewGroup container) {
-        if (this.lifecycleHandler != lifecycleHandler || this.container != container) {
-            if (this.container != null && this.container instanceof ControllerChangeListener) {
-                removeChangeListener((ControllerChangeListener)this.container);
-            }
-
-            if (container instanceof ControllerChangeListener) {
-                addChangeListener((ControllerChangeListener)container);
-            }
-
-            this.lifecycleHandler = lifecycleHandler;
-            this.container = container;
-
-            watchContainerAttach();
-        }
+    fun setHost(lifecycleHandler: LifecycleHandler, newContainer: ViewGroup) {
+        val currentContainer = this.container
+          if (this.lifecycleHandler != lifecycleHandler || currentContainer != newContainer) {
+              if (currentContainer != null && currentContainer is ControllerChangeListener) {
+                  removeChangeListener(currentContainer)
+              }
+              if (newContainer is ControllerChangeListener) {
+                  addChangeListener(newContainer)
+              }
+              this.lifecycleHandler = lifecycleHandler
+              this.container = newContainer
+              watchContainerAttach()
+          }
     }
 
-    @Override
-    public void saveInstanceState(@NonNull Bundle outState) {
-        super.saveInstanceState(outState);
-
-        transactionIndexer.saveInstanceState(outState);
+    override fun saveInstanceState(outState: Bundle) {
+        super.saveInstanceState(outState)
+        transactionIndexer.saveInstanceState(outState)
     }
 
-    @Override
-    public void restoreInstanceState(@NonNull Bundle savedInstanceState) {
-        super.restoreInstanceState(savedInstanceState);
-
-        transactionIndexer.restoreInstanceState(savedInstanceState);
+    override fun restoreInstanceState(savedInstanceState: Bundle) {
+        super.restoreInstanceState(savedInstanceState)
+        transactionIndexer.restoreInstanceState(savedInstanceState)
     }
 
-    @Override @Nullable
-    public Activity getActivity() {
-        return lifecycleHandler != null ? lifecycleHandler.getLifecycleActivity() : null;
+    override fun getActivity(): Activity? {
+        return lifecycleHandler?.lifecycleActivity
     }
 
-    @Override
-    public void onActivityDestroyed(@NonNull Activity activity, boolean isConfigurationChange) {
-        super.onActivityDestroyed(activity, isConfigurationChange);
-
+    override fun onActivityDestroyed(activity: Activity, isConfigurationChange: Boolean) {
+        super.onActivityDestroyed(activity, isConfigurationChange)
         if (!isConfigurationChange) {
-            lifecycleHandler = null;
+            lifecycleHandler = null
         }
     }
 
-    @Override
-    public final void invalidateOptionsMenu() {
-        if (lifecycleHandler != null && getActivity() != null) {
-            getActivity().invalidateOptionsMenu();
+    override fun invalidateOptionsMenu() {
+        if (lifecycleHandler != null) {
+            activity?.invalidateOptionsMenu()
         }
     }
 
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        lifecycleHandler.onActivityResult(requestCode, resultCode, data);
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        lifecycleHandler?.onActivityResult(requestCode, resultCode, data) ?: throwMissingLifecycleHandlerError()
     }
 
-    @Override
-    void startActivity(@NonNull Intent intent) {
-        lifecycleHandler.startActivity(intent);
+    override fun startActivity(intent: Intent) {
+        lifecycleHandler?.startActivity(intent) ?: throwMissingLifecycleHandlerError()
     }
 
-    @Override
-    void startActivityForResult(@NonNull String instanceId, @NonNull Intent intent, int requestCode) {
-        lifecycleHandler.startActivityForResult(instanceId, intent, requestCode, null);
+    override fun startActivityForResult(instanceId: String, intent: Intent, requestCode: Int) {
+        lifecycleHandler?.startActivityForResult(instanceId, intent, requestCode, null) ?: throwMissingLifecycleHandlerError()
     }
 
-    @Override
-    void startActivityForResult(@NonNull String instanceId, @NonNull Intent intent, int requestCode, @Nullable Bundle options) {
-        lifecycleHandler.startActivityForResult(instanceId, intent, requestCode, options);
+    override fun startActivityForResult(instanceId: String, intent: Intent, requestCode: Int, options: Bundle?) {
+        lifecycleHandler?.startActivityForResult(instanceId, intent, requestCode, options) ?: throwMissingLifecycleHandlerError()
     }
 
-    @Override
-    void startIntentSenderForResult(@NonNull String instanceId, @NonNull IntentSender intent, int requestCode, @Nullable Intent fillInIntent,
-                                    int flagsMask, int flagsValues, int extraFlags, @Nullable Bundle options) throws SendIntentException {
-        lifecycleHandler.startIntentSenderForResult(instanceId, intent, requestCode, fillInIntent, flagsMask, flagsValues, extraFlags, options);
+    @Throws(SendIntentException::class)
+    override fun startIntentSenderForResult(
+        instanceId: String, intent: IntentSender, requestCode: Int, fillInIntent: Intent?,
+        flagsMask: Int, flagsValues: Int, extraFlags: Int, options: Bundle?
+    ) {
+        lifecycleHandler?.startIntentSenderForResult(instanceId, intent, requestCode, fillInIntent, flagsMask,
+            flagsValues, extraFlags, options) ?: throwMissingLifecycleHandlerError()
     }
 
-    @Override
-    void registerForActivityResult(@NonNull String instanceId, int requestCode) {
-        lifecycleHandler.registerForActivityResult(instanceId, requestCode);
+    override fun registerForActivityResult(instanceId: String, requestCode: Int) {
+        lifecycleHandler?.registerForActivityResult(instanceId, requestCode) ?: throwMissingLifecycleHandlerError()
     }
 
-    @Override
-    void unregisterForActivityResults(@NonNull String instanceId) {
-        lifecycleHandler.unregisterForActivityResults(instanceId);
+    override fun unregisterForActivityResults(instanceId: String) {
+        lifecycleHandler?.unregisterForActivityResults(instanceId) ?: throwMissingLifecycleHandlerError()
     }
 
-    @Override
-    void requestPermissions(@NonNull String instanceId, @NonNull String[] permissions, int requestCode) {
-        lifecycleHandler.requestPermissions(instanceId, permissions, requestCode);
+    override fun requestPermissions(instanceId: String, permissions: Array<String>, requestCode: Int) {
+        lifecycleHandler?.requestPermissions(instanceId, permissions, requestCode) ?: throwMissingLifecycleHandlerError()
     }
 
-    @Override
-    boolean hasHost() {
-        return lifecycleHandler != null;
+    override fun hasHost(): Boolean {
+        return lifecycleHandler != null
     }
 
-    @Override @NonNull
-    List<Router> getSiblingRouters() {
-        return lifecycleHandler.getRouters();
+    override fun getSiblingRouters(): List<Router> {
+        return lifecycleHandler?.routers.orEmpty()
     }
 
-    @Override @NonNull
-    Router getRootRouter() {
-        return this;
+    override fun getRootRouter(): Router {
+        return this
     }
 
-    @Override @NonNull
-    TransactionIndexer getTransactionIndexer() {
-        return transactionIndexer;
+    override fun getTransactionIndexer(): TransactionIndexer {
+        return transactionIndexer
     }
 
-    @Override
-    public void onContextAvailable() {
-        super.onContextAvailable();
+    public override fun onContextAvailable() {
+        super.onContextAvailable()
     }
 
+    private fun throwMissingLifecycleHandlerError(): Nothing {
+        throw IllegalStateException("LifecycleHandler is missing")
+    }
 }

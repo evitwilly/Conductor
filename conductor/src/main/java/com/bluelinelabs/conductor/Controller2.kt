@@ -196,9 +196,9 @@ abstract class Controller2 protected constructor(
    * @param childRouter The router to be removed
    */
   fun removeChildRouter(childRouter: Router2) {
-    if (childRouter is ControllerHostedRouter && childRouters.remove(childRouter)) {
-      childRouter.destroy(true)
-    }
+//    if (childRouter is ControllerHostedRouter && childRouters.remove(childRouter)) {
+//      childRouter.destroy(true)
+//    }
   }
 
   /**
@@ -1025,7 +1025,7 @@ abstract class Controller2 protected constructor(
   private fun restoreChildControllerHosts() {
     childRouters.forEach { childRouter ->
       if (!childRouter.hasHost()) {
-        val containerView = view?.findViewById<View>(childRouter.hostId)
+        val containerView = view?.findViewById<View>(childRouter.hostId())
 
         if (containerView is ViewGroup) {
           //childRouter.setHostContainer(this, containerView)

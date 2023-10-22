@@ -19,7 +19,7 @@ import com.bluelinelabs.conductor.ActivityHostedRouter
 import com.bluelinelabs.conductor.Router
 import kotlinx.parcelize.Parcelize
 
-internal interface LifecycleHandler {
+interface LifecycleHandler {
   val routers: List<Router>
   val lifecycleActivity: Activity?
   fun getRouter(container: ViewGroup, savedInstanceState: Bundle?): Router
