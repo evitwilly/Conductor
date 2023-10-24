@@ -1,150 +1,129 @@
-package com.bluelinelabs.conductor.internal;
+package com.bluelinelabs.conductor.internal
 
-import android.view.View;
-import android.view.View.OnAttachStateChangeListener;
-import android.view.ViewGroup;
+import android.view.View
+import android.view.ViewGroup
 
-public class ViewAttachHandler implements OnAttachStateChangeListener {
-
-    private enum ReportedState {
-        VIEW_DETACHED,
-        ACTIVITY_STOPPED,
-        ATTACHED
+class ViewAttachHandler(private val attachListener: ViewAttachListener) : View.OnAttachStateChangeListener {
+    private enum class ReportedState {
+        VIEW_DETACHED, ACTIVITY_STOPPED, ATTACHED
     }
 
-    public interface ViewAttachListener {
-        void onAttached();
-        void onDetached(boolean fromActivityStop);
-        void onViewDetachAfterStop();
+    interface ViewAttachListener {
+        fun onAttached()
+        fun onDetached(fromActivityStop: Boolean)
+        fun onViewDetachAfterStop()
     }
 
     private interface ChildAttachListener {
-        void onAttached();
+        fun onAttached()
     }
 
-    private boolean rootAttached = false;
-    boolean childrenAttached = false;
-    private boolean activityStopped = false;
-    private ReportedState reportedState = ReportedState.VIEW_DETACHED;
-    private ViewAttachListener attachListener;
-    OnAttachStateChangeListener childOnAttachStateChangeListener;
+    private var rootAttached = false
+    private var activityStopped = false
+    private var reportedState = ReportedState.VIEW_DETACHED
 
-    public ViewAttachHandler(ViewAttachListener attachListener) {
-        this.attachListener = attachListener;
-    }
+    var childrenAttached = false
+    var childOnAttachStateChangeListener: View.OnAttachStateChangeListener? = null
 
-    @Override
-    public void onViewAttachedToWindow(final View v) {
+    override fun onViewAttachedToWindow(v: View) {
         if (rootAttached) {
-            return;
+            return
         }
-
-        rootAttached = true;
-        listenForDeepestChildAttach(v, new ChildAttachListener() {
-            @Override
-            public void onAttached() {
-                childrenAttached = true;
-                reportAttached();
+        rootAttached = true
+        listenForDeepestChildAttach(v, object : ChildAttachListener {
+            override fun onAttached() {
+                childrenAttached = true
+                reportAttached()
             }
-        });
+        })
     }
 
-    @Override
-    public void onViewDetachedFromWindow(View v) {
-        rootAttached = false;
+    override fun onViewDetachedFromWindow(v: View) {
+        rootAttached = false
         if (childrenAttached) {
-            childrenAttached = false;
-            reportDetached(false);
+            childrenAttached = false
+            reportDetached(false)
         }
     }
 
-    public void listenForAttach(final View view) {
-        view.addOnAttachStateChangeListener(this);
+    fun listenForAttach(view: View) {
+        view.addOnAttachStateChangeListener(this)
     }
 
-    public void unregisterAttachListener(View view) {
-        view.removeOnAttachStateChangeListener(this);
-
-        if (childOnAttachStateChangeListener != null && view instanceof ViewGroup) {
-            findDeepestChild((ViewGroup)view).removeOnAttachStateChangeListener(childOnAttachStateChangeListener);
-            childOnAttachStateChangeListener = null;
+    fun unregisterAttachListener(view: View) {
+        view.removeOnAttachStateChangeListener(this)
+        val childOnAttachStateChangeListener = childOnAttachStateChangeListener ?: return
+        if (view is ViewGroup) {
+            findDeepestChild(view).removeOnAttachStateChangeListener(childOnAttachStateChangeListener)
+            this.childOnAttachStateChangeListener = null
         }
     }
 
-    public void onActivityStarted() {
-        activityStopped = false;
-        reportAttached();
+    fun onActivityStarted() {
+        activityStopped = false
+        reportAttached()
     }
 
-    public void onActivityStopped() {
-        activityStopped = true;
-        reportDetached(true);
+    fun onActivityStopped() {
+        activityStopped = true
+        reportDetached(true)
     }
 
-    void reportAttached() {
+    fun reportAttached() {
         if (rootAttached && childrenAttached && !activityStopped && reportedState != ReportedState.ATTACHED) {
-            reportedState = ReportedState.ATTACHED;
-            attachListener.onAttached();
+            reportedState = ReportedState.ATTACHED
+            attachListener.onAttached()
         }
     }
 
-    private void reportDetached(boolean detachedForActivity) {
-        boolean wasDetachedForActivity = reportedState == ReportedState.ACTIVITY_STOPPED;
+    private fun reportDetached(detachedForActivity: Boolean) {
+        val wasDetachedForActivity = reportedState == ReportedState.ACTIVITY_STOPPED
 
-        if (detachedForActivity) {
-            reportedState = ReportedState.ACTIVITY_STOPPED;
-        } else {
-            reportedState = ReportedState.VIEW_DETACHED;
-        }
+        reportedState = if (detachedForActivity) ReportedState.ACTIVITY_STOPPED else ReportedState.VIEW_DETACHED
 
         if (wasDetachedForActivity && !detachedForActivity) {
-            attachListener.onViewDetachAfterStop();
+            attachListener.onViewDetachAfterStop()
         } else {
-            attachListener.onDetached(detachedForActivity);
+            attachListener.onDetached(detachedForActivity)
         }
     }
 
-    private void listenForDeepestChildAttach(final View view, final ChildAttachListener attachListener) {
-        if (!(view instanceof ViewGroup)) {
-            attachListener.onAttached();
-            return;
+    private fun listenForDeepestChildAttach(view: View, attachListener: ChildAttachListener) {
+        if (view !is ViewGroup) {
+            attachListener.onAttached()
+            return
         }
 
-        ViewGroup viewGroup = (ViewGroup)view;
-        if (viewGroup.getChildCount() == 0) {
-            attachListener.onAttached();
-            return;
+        if (view.childCount == 0) {
+            attachListener.onAttached()
+            return
         }
 
-        childOnAttachStateChangeListener = new OnAttachStateChangeListener() {
-            boolean attached = false;
-
-            @Override
-            public void onViewAttachedToWindow(View v) {
+        childOnAttachStateChangeListener = object : View.OnAttachStateChangeListener {
+            var attached = false
+            override fun onViewAttachedToWindow(v: View) {
                 if (!attached && childOnAttachStateChangeListener != null) {
-                    attached = true;
-                    attachListener.onAttached();
-                    v.removeOnAttachStateChangeListener(this);
-                    childOnAttachStateChangeListener = null;
+                    attached = true
+                    attachListener.onAttached()
+                    v.removeOnAttachStateChangeListener(this)
+                    childOnAttachStateChangeListener = null
                 }
             }
 
-            @Override
-            public void onViewDetachedFromWindow(View v) { }
-        };
-        findDeepestChild(viewGroup).addOnAttachStateChangeListener(childOnAttachStateChangeListener);
+            override fun onViewDetachedFromWindow(v: View) {}
+        }
+        findDeepestChild(view).addOnAttachStateChangeListener(childOnAttachStateChangeListener)
     }
 
-    private View findDeepestChild(ViewGroup viewGroup) {
-        if (viewGroup.getChildCount() == 0) {
-            return viewGroup;
+    private fun findDeepestChild(viewGroup: ViewGroup): View {
+        if (viewGroup.childCount == 0) {
+            return viewGroup
         }
-
-        View lastChild = viewGroup.getChildAt(viewGroup.getChildCount() - 1);
-        if (lastChild instanceof ViewGroup) {
-            return findDeepestChild((ViewGroup)lastChild);
+        val lastChild = viewGroup.getChildAt(viewGroup.childCount - 1)
+        return if (lastChild is ViewGroup) {
+            findDeepestChild(lastChild)
         } else {
-            return lastChild;
+            lastChild
         }
     }
 
